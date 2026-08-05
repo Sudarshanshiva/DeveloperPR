@@ -1,19 +1,16 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../domain/usecases/validate_token_usecase.dart';
-import '../../../domain/repositories/github_repository.dart';
+import '../../../data/datasources/github_remote_datasource.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  final ValidateTokenUseCase validateTokenUseCase;
-  final GithubRepository repository;
+  final GithubRemoteDataSource remoteDataSource;
 
   AuthBloc({
-    required this.validateTokenUseCase,
-    required this.repository,
+    required this.remoteDataSource,
   }) : super(AuthInitial()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
-    on<SubmitTokenEvent>(_onSubmitToken);
+    on<SubmitUsernameEvent>(_onSubmitUsername);
     on<LogoutEvent>(_onLogout);
   }
 
@@ -21,49 +18,26 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     CheckAuthStatusEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading());
-    final tokenResult = await repository.getSavedToken();
-
-    await tokenResult.fold(
-      (failure) async => emit(const Unauthenticated()),
-      (token) async {
-        if (token == null || token.isEmpty) {
-          emit(const Unauthenticated());
-        } else {
-          final userResult = await validateTokenUseCase(token);
-          userResult.fold(
-            (failure) => emit(Unauthenticated(errorMessage: failure.message)),
-            (user) => emit(Authenticated(user: user, token: token)),
-          );
-        }
-      },
-    );
+    emit(const Unauthenticated());
   }
 
-  Future<void> _onSubmitToken(
-    SubmitTokenEvent event,
+  Future<void> _onSubmitUsername(
+    SubmitUsernameEvent event,
     Emitter<AuthState> emit,
   ) async {
     emit(AuthLoading());
-    final result = await validateTokenUseCase(event.token.trim());
-
-    await result.fold(
-      (failure) async {
-        emit(Unauthenticated(errorMessage: failure.message));
-      },
-      (user) async {
-        await repository.saveToken(event.token.trim());
-        emit(Authenticated(user: user, token: event.token.trim()));
-      },
-    );
+    try {
+      final user = await remoteDataSource.getUserByUsername(event.username.trim());
+      emit(Authenticated(user: user, username: event.username.trim()));
+    } catch (e) {
+      emit(Unauthenticated(errorMessage: 'User "${event.username}" not found. Please check the username.'));
+    }
   }
 
   Future<void> _onLogout(
     LogoutEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading());
-    await repository.logout();
     emit(const Unauthenticated());
   }
 }

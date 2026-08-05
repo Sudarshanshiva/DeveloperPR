@@ -1,14 +1,70 @@
+import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../domain/usecases/get_pull_requests_usecase.dart';
-import 'pr_list_event.dart';
-import 'pr_list_state.dart';
+import '../../../data/datasources/github_remote_datasource.dart';
+import '../../../domain/entities/pull_request.dart';
 
+// Events
+abstract class PRListEvent extends Equatable {
+  const PRListEvent();
+  @override
+  List<Object?> get props => [];
+}
+
+class FetchPRsEvent extends PRListEvent {
+  final String owner;
+  final String repo;
+  final String stateFilter;
+
+  const FetchPRsEvent({
+    required this.owner,
+    required this.repo,
+    this.stateFilter = 'open',
+  });
+
+  @override
+  List<Object?> get props => [owner, repo, stateFilter];
+}
+
+// States
+abstract class PRListState extends Equatable {
+  const PRListState();
+  @override
+  List<Object?> get props => [];
+}
+
+class PRListInitial extends PRListState {}
+class PRListLoading extends PRListState {}
+
+class PRListLoaded extends PRListState {
+  final List<PullRequest> pullRequests;
+  final String owner;
+  final String repo;
+  final String activeStateFilter;
+
+  const PRListLoaded({
+    required this.pullRequests,
+    required this.owner,
+    required this.repo,
+    required this.activeStateFilter,
+  });
+
+  @override
+  List<Object?> get props => [pullRequests, owner, repo, activeStateFilter];
+}
+
+class PRListError extends PRListState {
+  final String message;
+  const PRListError(this.message);
+  @override
+  List<Object?> get props => [message];
+}
+
+// BLoC
 class PRListBloc extends Bloc<PRListEvent, PRListState> {
-  final GetPullRequestsUseCase getPullRequestsUseCase;
+  final GithubRemoteDataSource remoteDataSource;
 
-  PRListBloc({required this.getPullRequestsUseCase}) : super(PRListInitial()) {
+  PRListBloc({required this.remoteDataSource}) : super(PRListInitial()) {
     on<FetchPRsEvent>(_onFetchPRs);
-    on<ChangePRStateFilterEvent>(_onChangePRStateFilter);
   }
 
   Future<void> _onFetchPRs(
@@ -16,42 +72,20 @@ class PRListBloc extends Bloc<PRListEvent, PRListState> {
     Emitter<PRListState> emit,
   ) async {
     emit(PRListLoading());
-    final result = await getPullRequestsUseCase(
-      GetPRsParams(
+    try {
+      final prs = await remoteDataSource.getPullRequests(
         owner: event.owner,
         repo: event.repo,
         state: event.stateFilter,
-        forceRefresh: event.forceRefresh,
-      ),
-    );
-
-    result.fold(
-      (failure) => emit(PRListError(failure.message)),
-      (prs) => emit(
-        PRListLoaded(
-          pullRequests: prs,
-          owner: event.owner,
-          repo: event.repo,
-          activeStateFilter: event.stateFilter,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _onChangePRStateFilter(
-    ChangePRStateFilterEvent event,
-    Emitter<PRListState> emit,
-  ) async {
-    if (state is! PRListLoaded) return;
-    final currentState = state as PRListLoaded;
-
-    add(
-      FetchPRsEvent(
-        owner: currentState.owner,
-        repo: currentState.repo,
-        stateFilter: event.stateFilter,
-        forceRefresh: true,
-      ),
-    );
+      );
+      emit(PRListLoaded(
+        pullRequests: prs,
+        owner: event.owner,
+        repo: event.repo,
+        activeStateFilter: event.stateFilter,
+      ));
+    } catch (e) {
+      emit(PRListError(e.toString()));
+    }
   }
 }

@@ -13,6 +13,7 @@ abstract class GithubRepository {
   Future<Either<Failure, void>> logout();
 
   Future<Either<Failure, List<GithubRepo>>> getRepositories({
+    String? username,
     int page = 1,
     int perPage = 30,
     String? query,

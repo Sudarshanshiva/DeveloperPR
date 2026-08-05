@@ -7,8 +7,6 @@ import '../blocs/auth/auth_bloc.dart';
 import '../blocs/auth/auth_event.dart';
 import '../blocs/auth/auth_state.dart';
 import '../blocs/repo_list/repo_list_bloc.dart';
-import '../blocs/repo_list/repo_list_event.dart';
-import '../blocs/repo_list/repo_list_state.dart';
 import '../blocs/theme/theme_cubit.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/rate_limit_banner.dart';
@@ -31,7 +29,10 @@ class _RepoListScreenState extends State<RepoListScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<RepoListBloc>().add(const FetchReposEvent());
+    final authState = context.read<AuthBloc>().state;
+    if (authState is Authenticated) {
+      context.read<RepoListBloc>().add(FetchReposEvent(username: authState.username));
+    }
     _scrollController.addListener(_onScroll);
   }
 
@@ -57,7 +58,10 @@ class _RepoListScreenState extends State<RepoListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = (context.watch<AuthBloc>().state as Authenticated).user;
+    final authState = context.watch<AuthBloc>().state;
+    if (authState is! Authenticated) return const SizedBox.shrink();
+
+    final user = authState.user;
 
     return Scaffold(
       appBar: AppBar(
@@ -88,11 +92,11 @@ class _RepoListScreenState extends State<RepoListScreen> {
             tooltip: 'Toggle Theme',
           ),
           IconButton(
-            icon: const Icon(Icons.logout_rounded),
+            icon: const Icon(Icons.swap_horiz_rounded),
             onPressed: () {
               context.read<AuthBloc>().add(LogoutEvent());
             },
-            tooltip: 'Sign Out',
+            tooltip: 'Switch User',
           ),
         ],
       ),
@@ -142,7 +146,9 @@ class _RepoListScreenState extends State<RepoListScreen> {
                           const SizedBox(height: 16),
                           ElevatedButton.icon(
                             onPressed: () {
-                              context.read<RepoListBloc>().add(const FetchReposEvent(forceRefresh: true));
+                              context.read<RepoListBloc>().add(
+                                    FetchReposEvent(username: authState.username, forceRefresh: true),
+                                  );
                             },
                             icon: const Icon(Icons.refresh_rounded),
                             label: const Text('Retry'),
@@ -155,14 +161,28 @@ class _RepoListScreenState extends State<RepoListScreen> {
 
                 if (state is RepoListLoaded) {
                   if (state.repos.isEmpty) {
-                    return const Center(
-                      child: Text('No repositories found 📦', style: TextStyle(fontSize: 16)),
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.folder_off_rounded, size: 48, color: Colors.grey),
+                          const SizedBox(height: 12),
+                          Text(
+                            state.searchQuery != null
+                                ? 'No repos matching "${state.searchQuery}"'
+                                : 'No public repositories found 📦',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ],
+                      ),
                     );
                   }
 
                   return RefreshIndicator(
                     onRefresh: () async {
-                      context.read<RepoListBloc>().add(const FetchReposEvent(forceRefresh: true));
+                      context.read<RepoListBloc>().add(
+                            FetchReposEvent(username: state.username, forceRefresh: true),
+                          );
                     },
                     child: ListView.builder(
                       controller: _scrollController,
@@ -275,7 +295,7 @@ class _RepoListScreenState extends State<RepoListScreen> {
                     children: [
                       const Icon(Icons.adjust_rounded, size: 14, color: Colors.orangeAccent),
                       const SizedBox(width: 4),
-                      Text('${repo.openIssuesCount} issues/PRs', style: const TextStyle(fontSize: 12)),
+                      Text('${repo.openIssuesCount} issues', style: const TextStyle(fontSize: 12)),
                     ],
                   ),
                   Text(

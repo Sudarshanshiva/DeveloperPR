@@ -22,13 +22,12 @@ class GithubRepositoryImpl implements GithubRepository {
     required this.networkInfo,
   });
 
+  // Validate by looking up user by username
   @override
-  Future<Either<Failure, User>> validateToken(String token) async {
+  Future<Either<Failure, User>> validateToken(String usernameOrToken) async {
     try {
-      final userModel = await remoteDataSource.validateToken(token);
+      final userModel = await remoteDataSource.getUserByUsername(usernameOrToken);
       return Right(userModel);
-    } on AuthException catch (e) {
-      return Left(AuthFailure(e.message));
     } on NetworkException {
       return Left(NetworkFailure());
     } on RateLimitException catch (e) {
@@ -40,56 +39,43 @@ class GithubRepositoryImpl implements GithubRepository {
 
   @override
   Future<Either<Failure, void>> saveToken(String token) async {
-    try {
-      await localDataSource.saveToken(token);
-      return const Right(null);
-    } catch (e) {
-      return Left(CacheFailure(e.toString()));
-    }
+    return const Right(null); // No-op — no token to save
   }
 
   @override
   Future<Either<Failure, String?>> getSavedToken() async {
-    try {
-      final token = await localDataSource.getToken();
-      return Right(token);
-    } catch (e) {
-      return Left(CacheFailure(e.toString()));
-    }
+    return const Right(null); // No saved token
   }
 
   @override
   Future<Either<Failure, void>> logout() async {
-    try {
-      await localDataSource.deleteToken();
-      return const Right(null);
-    } catch (e) {
-      return Left(CacheFailure(e.toString()));
-    }
+    return const Right(null); // Just clears auth state
   }
 
   @override
   Future<Either<Failure, List<GithubRepo>>> getRepositories({
+    String? username,
     int page = 1,
     int perPage = 30,
     String? query,
     bool forceRefresh = false,
   }) async {
+    if (username == null || username.isEmpty) {
+      return const Left(ServerFailure('Username is required'));
+    }
     final isOnline = await networkInfo.isConnected;
 
     if (isOnline && (forceRefresh || query == null || query.isEmpty)) {
       try {
-        final remoteRepos = await remoteDataSource.getRepositories(
+        final remoteRepos = await remoteDataSource.getUserRepositories(
+          username: username,
           page: page,
           perPage: perPage,
-          query: query,
         );
         if (page == 1 && (query == null || query.isEmpty)) {
           await localDataSource.cacheRepositories(remoteRepos);
         }
         return Right(remoteRepos);
-      } on AuthException catch (e) {
-        return Left(AuthFailure(e.message));
       } on RateLimitException catch (e) {
         return Left(RateLimitFailure(e.message, resetTimestamp: e.resetTimestamp));
       } on ServerException catch (e) {
@@ -142,8 +128,6 @@ class GithubRepositoryImpl implements GithubRepository {
           await localDataSource.cachePullRequests(repoKey, remotePRs);
         }
         return Right(remotePRs);
-      } on AuthException catch (e) {
-        return Left(AuthFailure(e.message));
       } on RateLimitException catch (e) {
         return Left(RateLimitFailure(e.message, resetTimestamp: e.resetTimestamp));
       } on ServerException catch (e) {
@@ -184,8 +168,6 @@ class GithubRepositoryImpl implements GithubRepository {
         );
         await localDataSource.cachePRDetails(prKey, remoteDetails);
         return Right(remoteDetails);
-      } on AuthException catch (e) {
-        return Left(AuthFailure(e.message));
       } on RateLimitException catch (e) {
         return Left(RateLimitFailure(e.message, resetTimestamp: e.resetTimestamp));
       } on ServerException catch (e) {

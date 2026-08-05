@@ -9,12 +9,12 @@ abstract class AuthEvent extends Equatable {
 
 class CheckAuthStatusEvent extends AuthEvent {}
 
-class SubmitTokenEvent extends AuthEvent {
-  final String token;
-  const SubmitTokenEvent(this.token);
+class SubmitUsernameEvent extends AuthEvent {
+  final String username;
+  const SubmitUsernameEvent(this.username);
 
   @override
-  List<Object?> get props => [token];
+  List<Object?> get props => [username];
 }
 
 class LogoutEvent extends AuthEvent {}

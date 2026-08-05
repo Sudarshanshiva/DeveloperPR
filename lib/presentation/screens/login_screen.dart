@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../blocs/auth/auth_bloc.dart';
 import '../blocs/auth/auth_event.dart';
 import '../blocs/auth/auth_state.dart';
@@ -14,20 +13,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _tokenController = TextEditingController();
-  bool _obscureToken = true;
+  final _usernameController = TextEditingController();
 
   @override
   void dispose() {
-    _tokenController.dispose();
+    _usernameController.dispose();
     super.dispose();
-  }
-
-  Future<void> _launchPatGuide() async {
-    final uri = Uri.parse('https://github.com/settings/tokens/new?scopes=repo,read:user&description=Flutter+PR+Dashboard');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 
   @override
@@ -72,7 +63,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                        gradient: LinearGradient(
+                          colors: [
+                            Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                       ),
                       child: Icon(
                         Icons.insights_rounded,
@@ -90,53 +88,48 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Enter your GitHub Personal Access Token (PAT) with `repo` scope to monitor & review Pull Requests.',
+                      'Enter any GitHub username to browse their public repositories and review Pull Requests.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                        color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                       ),
                     ),
                     const SizedBox(height: 32),
                     TextField(
-                      controller: _tokenController,
-                      obscureText: _obscureToken,
-                      decoration: InputDecoration(
-                        labelText: 'Personal Access Token',
-                        hintText: 'ghp_xxxxxxxxxxxxxxxxxxxx',
-                        prefixIcon: const Icon(Icons.key_rounded),
-                        suffixIcon: IconButton(
-                          icon: Icon(_obscureToken ? Icons.visibility_off : Icons.visibility),
-                          onPressed: () {
-                            setState(() {
-                              _obscureToken = !_obscureToken;
-                            });
-                          },
-                        ),
+                      controller: _usernameController,
+                      decoration: const InputDecoration(
+                        labelText: 'GitHub Username',
+                        hintText: 'e.g. torvalds, flutter, octocat',
+                        prefixIcon: Icon(Icons.person_rounded),
                       ),
+                      textInputAction: TextInputAction.go,
+                      onSubmitted: (_) => _submitUsername(context, state),
                     ),
                     const SizedBox(height: 20),
-                    ElevatedButton(
+                    ElevatedButton.icon(
                       onPressed: state is AuthLoading
                           ? null
-                          : () {
-                              final token = _tokenController.text.trim();
-                              if (token.isNotEmpty) {
-                                context.read<AuthBloc>().add(SubmitTokenEvent(token));
-                              }
-                            },
-                      child: state is AuthLoading
+                          : () => _submitUsername(context, state),
+                      icon: state is AuthLoading
                           ? const SizedBox(
                               height: 20,
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
-                          : const Text('Authenticate & Connect'),
+                          : const Icon(Icons.arrow_forward_rounded),
+                      label: const Text('Browse Repositories'),
                     ),
-                    const SizedBox(height: 16),
-                    TextButton.icon(
-                      onPressed: _launchPatGuide,
-                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                      label: const Text('Generate Token on GitHub.com'),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey.shade500),
+                        const SizedBox(width: 6),
+                        Text(
+                          'No login or token required — uses GitHub public API',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -146,5 +139,12 @@ class _LoginScreenState extends State<LoginScreen> {
         },
       ),
     );
+  }
+
+  void _submitUsername(BuildContext context, AuthState state) {
+    final username = _usernameController.text.trim();
+    if (username.isNotEmpty) {
+      context.read<AuthBloc>().add(SubmitUsernameEvent(username));
+    }
   }
 }

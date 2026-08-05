@@ -7,14 +7,18 @@ import '../models/review_model.dart';
 import '../models/user_model.dart';
 
 abstract class GithubRemoteDataSource {
-  Future<UserModel> validateToken(String token);
-  Future<List<GithubRepoModel>> getRepositories({int page = 1, int perPage = 30, String? query});
+  Future<UserModel> getUserByUsername(String username);
+  Future<List<GithubRepoModel>> getUserRepositories({
+    required String username,
+    int page,
+    int perPage,
+  });
   Future<List<PullRequestModel>> getPullRequests({
     required String owner,
     required String repo,
-    String state = 'open',
-    int page = 1,
-    int perPage = 30,
+    String state,
+    int page,
+    int perPage,
   });
   Future<PullRequestModel> getPullRequestDetails({
     required String owner,
@@ -39,18 +43,13 @@ class GithubRemoteDataSourceImpl implements GithubRemoteDataSource {
   GithubRemoteDataSourceImpl({required this.dio});
 
   @override
-  Future<UserModel> validateToken(String token) async {
+  Future<UserModel> getUserByUsername(String username) async {
     try {
-      final response = await dio.get(
-        '/user',
-        options: Options(
-          headers: {'Authorization': 'Bearer $token'},
-        ),
-      );
+      final response = await dio.get('/users/$username');
       if (response.statusCode == 200) {
         return UserModel.fromJson(response.data as Map<String, dynamic>);
       } else {
-        throw ServerException('Failed to validate token', statusCode: response.statusCode);
+        throw ServerException('User not found', statusCode: response.statusCode);
       }
     } on DioException catch (e) {
       _handleDioException(e);
@@ -58,38 +57,23 @@ class GithubRemoteDataSourceImpl implements GithubRemoteDataSource {
   }
 
   @override
-  Future<List<GithubRepoModel>> getRepositories({
+  Future<List<GithubRepoModel>> getUserRepositories({
+    required String username,
     int page = 1,
     int perPage = 30,
-    String? query,
   }) async {
     try {
-      Response response;
-      if (query != null && query.isNotEmpty) {
-        response = await dio.get(
-          '/search/repositories',
-          queryParameters: {
-            'q': '$query in:name',
-            'page': page,
-            'per_page': perPage,
-            'sort': 'updated',
-          },
-        );
-        final items = (response.data['items'] as List?) ?? [];
-        return items.map((e) => GithubRepoModel.fromJson(e as Map<String, dynamic>)).toList();
-      } else {
-        response = await dio.get(
-          '/user/repos',
-          queryParameters: {
-            'page': page,
-            'per_page': perPage,
-            'sort': 'updated',
-            'affiliation': 'owner,collaborator,organization_member',
-          },
-        );
-        final items = (response.data as List?) ?? [];
-        return items.map((e) => GithubRepoModel.fromJson(e as Map<String, dynamic>)).toList();
-      }
+      final response = await dio.get(
+        '/users/$username/repos',
+        queryParameters: {
+          'page': page,
+          'per_page': perPage,
+          'sort': 'updated',
+          'direction': 'desc',
+        },
+      );
+      final items = (response.data as List?) ?? [];
+      return items.map((e) => GithubRepoModel.fromJson(e as Map<String, dynamic>)).toList();
     } on DioException catch (e) {
       _handleDioException(e);
     }
@@ -131,7 +115,7 @@ class GithubRemoteDataSourceImpl implements GithubRemoteDataSource {
       final prResponse = await dio.get('/repos/$owner/$repo/pulls/$number');
       final prModel = PullRequestModel.fromJson(prResponse.data as Map<String, dynamic>);
 
-      // Optionally fetch combined CI commit status
+      // Fetch combined CI commit status
       String? ciState;
       try {
         final headSha = prResponse.data['head']?['sha'] as String?;
@@ -198,8 +182,8 @@ class GithubRemoteDataSourceImpl implements GithubRemoteDataSource {
   }
 
   Never _handleDioException(DioException e) {
-    if (e.response?.statusCode == 401) {
-      throw AuthException('Invalid or expired Personal Access Token');
+    if (e.response?.statusCode == 404) {
+      throw ServerException('Not found', statusCode: 404);
     }
     if (e.response?.statusCode == 403 && e.response?.headers.value('x-ratelimit-remaining') == '0') {
       final resetStr = e.response?.headers.value('x-ratelimit-reset');
