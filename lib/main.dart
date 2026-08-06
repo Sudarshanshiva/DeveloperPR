@@ -1,7 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'core/cache/hive_cache_manager.dart';
 import 'core/network/dio_client.dart';
@@ -9,17 +8,7 @@ import 'core/network/interceptors.dart';
 import 'core/network/network_info.dart';
 import 'core/theme/app_theme.dart';
 
-import 'data/datasources/github_local_datasource.dart';
 import 'data/datasources/github_remote_datasource.dart';
-import 'data/repositories/github_repository_impl.dart';
-
-import 'domain/repositories/github_repository.dart';
-import 'domain/usecases/get_pr_details_usecase.dart';
-import 'domain/usecases/get_pr_files_usecase.dart';
-import 'domain/usecases/get_pr_reviews_usecase.dart';
-import 'domain/usecases/get_pull_requests_usecase.dart';
-import 'domain/usecases/get_repos_usecase.dart';
-import 'domain/usecases/validate_token_usecase.dart';
 
 import 'presentation/blocs/auth/auth_bloc.dart';
 import 'presentation/blocs/auth/auth_event.dart';
@@ -36,49 +25,22 @@ void main() async {
   // Initialize Hive Offline Storage
   await HiveCacheManager.init();
 
-  // Instantiate Core Services & Dependencies
-  final secureStorage = const FlutterSecureStorage();
-  final cacheManager = HiveCacheManager();
   final connectivity = Connectivity();
   final networkInfo = NetworkInfoImpl(connectivity);
-
-  final localDataSource = GithubLocalDataSourceImpl(
-    secureStorage: secureStorage,
-    cacheManager: cacheManager,
-  );
-
   final rateLimitNotifier = RateLimitNotifier();
 
+  // No auth token needed — public GitHub API
   final dioClient = DioClient(
-    getToken: () async => await localDataSource.getToken(),
+    getToken: () async => null,
     rateLimitNotifier: rateLimitNotifier,
   );
 
   final remoteDataSource = GithubRemoteDataSourceImpl(dio: dioClient.dio);
 
-  final repository = GithubRepositoryImpl(
-    remoteDataSource: remoteDataSource,
-    localDataSource: localDataSource,
-    networkInfo: networkInfo,
-  );
-
-  // UseCases
-  final validateTokenUseCase = ValidateTokenUseCase(repository);
-  final getReposUseCase = GetReposUseCase(repository);
-  final getPullRequestsUseCase = GetPullRequestsUseCase(repository);
-  final getPRDetailsUseCase = GetPRDetailsUseCase(repository);
-  final getPRFilesUseCase = GetPRFilesUseCase(repository);
-  final getPRReviewsUseCase = GetPRReviewsUseCase(repository);
-
   runApp(
     MultiRepositoryProvider(
       providers: [
-        RepositoryProvider<GithubRepository>.value(value: repository),
-        RepositoryProvider<GetReposUseCase>.value(value: getReposUseCase),
-        RepositoryProvider<GetPullRequestsUseCase>.value(value: getPullRequestsUseCase),
-        RepositoryProvider<GetPRDetailsUseCase>.value(value: getPRDetailsUseCase),
-        RepositoryProvider<GetPRFilesUseCase>.value(value: getPRFilesUseCase),
-        RepositoryProvider<GetPRReviewsUseCase>.value(value: getPRReviewsUseCase),
+        RepositoryProvider<GithubRemoteDataSource>.value(value: remoteDataSource),
         RepositoryProvider<RateLimitNotifier>.value(value: rateLimitNotifier),
       ],
       child: MultiBlocProvider(
@@ -87,12 +49,11 @@ void main() async {
           BlocProvider(create: (_) => ConnectivityCubit(networkInfo: networkInfo)),
           BlocProvider(
             create: (_) => AuthBloc(
-              validateTokenUseCase: validateTokenUseCase,
-              repository: repository,
+              remoteDataSource: remoteDataSource,
             )..add(CheckAuthStatusEvent()),
           ),
           BlocProvider(
-            create: (_) => RepoListBloc(getReposUseCase: getReposUseCase),
+            create: (_) => RepoListBloc(remoteDataSource: remoteDataSource),
           ),
         ],
         child: PRDashboardApp(rateLimitNotifier: rateLimitNotifier),
