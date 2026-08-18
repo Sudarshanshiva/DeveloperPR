@@ -33,7 +33,7 @@ class AIReviewTab extends StatefulWidget {
 
 class _AIReviewTabState extends State<AIReviewTab> {
   final _keyController = TextEditingController();
-  String _selectedProvider = 'claude';
+  String _selectedProvider = 'gemini';
 
   @override
   void initState() {
@@ -45,6 +45,97 @@ class _AIReviewTabState extends State<AIReviewTab> {
   void dispose() {
     _keyController.dispose();
     super.dispose();
+  }
+
+  // ── Provider helpers ────────────────────────────────────────────────────────
+
+  String _providerDisplayName(String p) {
+    switch (p) {
+      case 'gemini': return 'Gemini Flash';
+      case 'groq': return 'Groq Llama';
+      case 'claude': return 'Claude';
+      case 'openai': return 'OpenAI GPT';
+      default: return p;
+    }
+  }
+
+  String _keyLabel(String p) {
+    switch (p) {
+      case 'gemini': return 'Gemini API Key (AIza...)';
+      case 'groq': return 'Groq API Key (gsk_...)';
+      case 'claude': return 'Claude API Key (sk-ant-...)';
+      default: return 'OpenAI API Key (sk-...)';
+    }
+  }
+
+  String _keyHint(String p) {
+    switch (p) {
+      case 'gemini': return 'AIzaSy...';
+      case 'groq': return 'gsk_live_...';
+      case 'claude': return 'sk-ant-api03-...';
+      default: return 'sk-...';
+    }
+  }
+
+  String _keyUrl(String p) {
+    switch (p) {
+      case 'gemini': return 'https://aistudio.google.com/app/apikey';
+      case 'groq': return 'https://console.groq.com/keys';
+      case 'claude': return 'https://console.anthropic.com/settings/keys';
+      default: return 'https://platform.openai.com/api-keys';
+    }
+  }
+
+  Widget _providerChip(
+    BuildContext context, {
+    required String value,
+    required String label,
+    required String subtitle,
+    required IconData icon,
+    required bool isFree,
+  }) {
+    final isSelected = _selectedProvider == value;
+    final color = isSelected ? Theme.of(context).colorScheme.primary : Colors.grey.shade600;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedProvider = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+              : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey.withValues(alpha: 0.3),
+            width: isSelected ? 1.8 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: color)),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isFree ? Colors.green : Colors.grey.shade500,
+                      fontWeight: isFree ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -118,31 +209,50 @@ class _AIReviewTabState extends State<AIReviewTab> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Add your Claude (Anthropic) or OpenAI API key to enable automated code review analysis, risk level detection, and potential issue flagging.',
+              'Choose a FREE AI provider below to get automated code review, risk detection, and issue flagging — no credit card needed.',
               style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.8), height: 1.4),
+            ),
+            const SizedBox(height: 8),
+            // Free badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.star_rounded, size: 14, color: Colors.green),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Gemini & Groq are 100% free — no credit card required!',
+                      style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
 
-            // Provider selection
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment<String>(
-                  value: 'claude',
-                  label: Text('Claude (Anthropic)'),
-                  icon: Icon(Icons.psychology_rounded),
-                ),
-                ButtonSegment<String>(
-                  value: 'openai',
-                  label: Text('OpenAI'),
-                  icon: Icon(Icons.bolt_rounded),
-                ),
+            // Provider selection — 2x2 grid
+            const Text('Select AI Provider', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 2.4,
+              children: [
+                _providerChip(context, value: 'gemini', label: 'Gemini Flash', subtitle: 'FREE · Google', icon: Icons.auto_awesome_rounded, isFree: true),
+                _providerChip(context, value: 'groq', label: 'Groq Llama', subtitle: 'FREE · Ultra Fast', icon: Icons.bolt_rounded, isFree: true),
+                _providerChip(context, value: 'claude', label: 'Claude 3.5', subtitle: 'Paid · Anthropic', icon: Icons.psychology_rounded, isFree: false),
+                _providerChip(context, value: 'openai', label: 'GPT-3.5', subtitle: 'Paid · OpenAI', icon: Icons.smart_toy_rounded, isFree: false),
               ],
-              selected: {_selectedProvider},
-              onSelectionChanged: (set) {
-                setState(() {
-                  _selectedProvider = set.first;
-                });
-              },
             ),
             const SizedBox(height: 16),
 
@@ -150,20 +260,15 @@ class _AIReviewTabState extends State<AIReviewTab> {
               controller: _keyController,
               obscureText: true,
               decoration: InputDecoration(
-                labelText: _selectedProvider == 'claude' ? 'Claude API Key (sk-ant-...)' : 'OpenAI API Key (sk-...)',
-                hintText: _selectedProvider == 'claude' ? 'sk-ant-api03-...' : 'sk-...',
+                labelText: _keyLabel(_selectedProvider),
+                hintText: _keyHint(_selectedProvider),
                 prefixIcon: const Icon(Icons.key_rounded),
               ),
             ),
             const SizedBox(height: 12),
 
             InkWell(
-              onTap: () {
-                final url = _selectedProvider == 'claude'
-                    ? 'https://console.anthropic.com/settings/keys'
-                    : 'https://platform.openai.com/api-keys';
-                launchUrl(Uri.parse(url));
-              },
+              onTap: () => launchUrl(Uri.parse(_keyUrl(_selectedProvider))),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
@@ -171,7 +276,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
                     Icon(Icons.open_in_new_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 6),
                     Text(
-                      'Get ${_selectedProvider == 'claude' ? 'Claude' : 'OpenAI'} API Key',
+                      'Get FREE ${_providerDisplayName(_selectedProvider)} API Key →',
                       style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -234,7 +339,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Analyze ${widget.files.length} changed files with ${provider == 'claude' ? 'Claude 3.5 Sonnet' : 'OpenAI GPT-4o'} for security vulnerabilities, memory leaks, architectural risks, and test coverage.',
+              'Analyze ${widget.files.length} changed files with ${provider == 'gemini' ? 'Gemini 1.5 Flash (Free)' : provider == 'groq' ? 'Groq Llama 3.1 (Free)' : provider == 'claude' ? 'Claude 3.5 Sonnet' : 'GPT-3.5 Turbo'} for security vulnerabilities, memory leaks, architectural risks, and test coverage.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.75)),
             ),
@@ -370,7 +475,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Analyzed ${result.analyzedFileCount} files using ${provider == 'claude' ? 'Claude 3.5' : 'GPT-4o'}',
+                        'Analyzed ${result.analyzedFileCount} files · ${provider == 'gemini' ? 'Gemini 1.5 Flash' : provider == 'groq' ? 'Groq Llama 3.1' : provider == 'claude' ? 'Claude 3.5' : 'GPT-3.5'}',
                         style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                     ],
