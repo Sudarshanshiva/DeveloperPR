@@ -4,10 +4,15 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../core/network/interceptors.dart';
 import '../../data/datasources/github_remote_datasource.dart';
+import '../../domain/repositories/ai_analysis_repository.dart';
+import '../../domain/usecases/analyze_pull_request_usecase.dart';
+import '../blocs/ai_analysis/ai_analysis_bloc.dart';
 import '../blocs/pr_detail/pr_detail_bloc.dart';
+import '../widgets/ai_review_tab.dart';
 import '../widgets/file_diff_tile.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/pr_status_badge.dart';
+import '../widgets/pr_summary_breakdown.dart';
 import '../widgets/rate_limit_banner.dart';
 import '../widgets/reviewer_tile.dart';
 
@@ -27,20 +32,32 @@ class PRDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => PRDetailBloc(
-        remoteDataSource: context.read<GithubRemoteDataSource>(),
-      )..add(FetchPRDetailEvent(owner: owner, repo: repoName, number: prNumber)),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (context) => PRDetailBloc(
+            remoteDataSource: context.read<GithubRemoteDataSource>(),
+          )..add(FetchPRDetailEvent(owner: owner, repo: repoName, number: prNumber)),
+        ),
+        BlocProvider(
+          create: (context) => AiAnalysisBloc(
+            repository: context.read<AiAnalysisRepository>(),
+            analyzePullRequestUseCase: context.read<AnalyzePullRequestUseCase>(),
+          ),
+        ),
+      ],
       child: DefaultTabController(
-        length: 3,
+        length: 4,
         child: Scaffold(
           appBar: AppBar(
             title: Text('#$prNumber in $repoName'),
             bottom: const TabBar(
+              isScrollable: true,
               tabs: [
                 Tab(text: 'Overview', icon: Icon(Icons.description_rounded, size: 18)),
                 Tab(text: 'Files', icon: Icon(Icons.code_rounded, size: 18)),
                 Tab(text: 'Reviews', icon: Icon(Icons.rate_review_rounded, size: 18)),
+                Tab(text: 'AI Review', icon: Icon(Icons.auto_awesome_rounded, size: 18)),
               ],
             ),
           ),
@@ -149,6 +166,12 @@ class PRDetailScreen extends StatelessWidget {
                                     : const Text('No description provided.',
                                         style: TextStyle(
                                             fontStyle: FontStyle.italic, color: Colors.grey)),
+                                const SizedBox(height: 24),
+                                PRSummaryBreakdown(
+                                  pullRequest: pr,
+                                  files: state.files,
+                                  prKey: '${owner}_${repoName}_${pr.number}',
+                                ),
                                 const SizedBox(height: 32),
                               ],
                             ),
@@ -175,6 +198,16 @@ class PRDetailScreen extends StatelessWidget {
                                   itemBuilder: (context, i) =>
                                       ReviewerTile(review: state.reviews[i]),
                                 ),
+
+                          // ─── Tab 4: AI Review ───
+                          AIReviewTab(
+                            owner: owner,
+                            repoName: repoName,
+                            prNumber: prNumber,
+                            prTitle: pr.title,
+                            prDescription: pr.body,
+                            files: state.files,
+                          ),
                         ],
                       );
                     }

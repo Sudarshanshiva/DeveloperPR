@@ -4,17 +4,23 @@ class HiveCacheManager {
   static const String reposBoxName = 'github_repos_cache';
   static const String prsBoxName = 'github_prs_cache';
   static const String prDetailsBoxName = 'github_pr_details_cache';
+  static const String prNotesBoxName = 'github_pr_notes_cache';
+  static const String aiAnalysisBoxName = 'ai_analysis_cache';
 
   static Future<void> init() async {
     await Hive.initFlutter();
     await Hive.openBox(reposBoxName);
     await Hive.openBox(prsBoxName);
     await Hive.openBox(prDetailsBoxName);
+    await Hive.openBox(prNotesBoxName);
+    await Hive.openBox(aiAnalysisBoxName);
   }
 
   Box get reposBox => Hive.box(reposBoxName);
   Box get prsBox => Hive.box(prsBoxName);
   Box get prDetailsBox => Hive.box(prDetailsBoxName);
+  Box get prNotesBox => Hive.box(prNotesBoxName);
+  Box get aiAnalysisBox => Hive.box(aiAnalysisBoxName);
 
   Future<void> cacheRepos(List<Map<String, dynamic>> jsonList) async {
     await reposBox.put('user_repos', jsonList);
@@ -53,9 +59,33 @@ class HiveCacheManager {
     return null;
   }
 
+  // Custom PR Notes/Descriptions
+  Future<void> savePRNote(String prKey, String note) async {
+    await prNotesBox.put(prKey, note);
+  }
+
+  String? getPRNote(String prKey) {
+    return prNotesBox.get(prKey) as String?;
+  }
+
+  // AI PR Analysis Cache
+  Future<void> cacheAiAnalysis(String aiKey, Map<String, dynamic> jsonMap) async {
+    await aiAnalysisBox.put(aiKey, jsonMap);
+  }
+
+  Map<String, dynamic>? getCachedAiAnalysis(String aiKey) {
+    final raw = aiAnalysisBox.get(aiKey);
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return null;
+  }
+
   Future<void> clearAllCache() async {
     await reposBox.clear();
     await prsBox.clear();
     await prDetailsBox.clear();
+    await prNotesBox.clear();
+    await aiAnalysisBox.clear();
   }
 }

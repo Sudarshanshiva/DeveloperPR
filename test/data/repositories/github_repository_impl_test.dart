@@ -50,17 +50,17 @@ void main() {
     test('should return remote data and cache it when device is online', () async {
       // arrange
       when(() => mockNetworkInfo.isConnected).thenAnswer((_) async => true);
-      when(() => mockRemoteDataSource.getRepositories(page: 1, perPage: 30, query: null))
+      when(() => mockRemoteDataSource.getUserRepositories(username: 'user', page: 1, perPage: 30))
           .thenAnswer((_) async => tRepoModelList);
       when(() => mockLocalDataSource.cacheRepositories(tRepoModelList))
           .thenAnswer((_) async => {});
 
       // act
-      final result = await repository.getRepositories(page: 1);
+      final result = await repository.getRepositories(username: 'user', page: 1);
 
       // assert
       expect(result, Right(tRepoModelList));
-      verify(() => mockRemoteDataSource.getRepositories(page: 1, perPage: 30, query: null)).called(1);
+      verify(() => mockRemoteDataSource.getUserRepositories(username: 'user', page: 1, perPage: 30)).called(1);
       verify(() => mockLocalDataSource.cacheRepositories(tRepoModelList)).called(1);
     });
 
@@ -70,7 +70,7 @@ void main() {
       when(() => mockLocalDataSource.getCachedRepositories()).thenReturn(tRepoModelList);
 
       // act
-      final result = await repository.getRepositories(page: 1);
+      final result = await repository.getRepositories(username: 'user', page: 1);
 
       // assert
       expect(result, Right(tRepoModelList));
