@@ -38,7 +38,7 @@ class AuthFailure extends Failure {
 
 class QuotaExceededFailure extends Failure {
   final int remainingFreeCount;
-  const QuotaExceededFailure([super.message = 'Daily free AI PR review limit reached (3/3 used today).', this.remainingFreeCount = 0]);
+  const QuotaExceededFailure(super.message, {this.remainingFreeCount = 0});
 
   @override
   List<Object?> get props => [message, remainingFreeCount];

@@ -148,7 +148,7 @@ class _PremiumUpgradeModalState extends State<PremiumUpgradeModal> {
                   const SizedBox(height: 12),
                   const Text(
                     'DevUtil Pro Member',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.extrabold),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
                   _buildFeatureRow(context, 'Unlimited AI PR Code Reviews'),
@@ -241,7 +241,7 @@ class _PremiumUpgradeModalState extends State<PremiumUpgradeModal> {
                     SegmentedButton<String>(
                       segments: const [
                         ButtonSegment(value: 'gemini', label: Text('Gemini (Free)'), icon: Icon(Icons.auto_awesome_rounded)),
-                        ButtonSegment(value: 'groq', label: 'Groq (Free)', icon: Icon(Icons.bolt_rounded)),
+                        ButtonSegment(value: 'groq', label: Text('Groq (Free)'), icon: Icon(Icons.bolt_rounded)),
                       ],
                       selected: {_selectedProvider},
                       onSelectionChanged: (set) => setState(() => _selectedProvider = set.first),
