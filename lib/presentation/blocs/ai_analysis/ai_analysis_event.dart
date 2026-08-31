@@ -9,10 +9,14 @@ abstract class AiAnalysisEvent extends Equatable {
 
 class CheckAiApiKeyStatusEvent extends AiAnalysisEvent {}
 
+class CheckUserQuotaEvent extends AiAnalysisEvent {}
+
+class UnlockProSubscriptionEvent extends AiAnalysisEvent {}
+
 class SaveAiApiKeyEvent extends AiAnalysisEvent {
   final String apiKey;
   final String provider;
-  const SaveAiApiKeyEvent({required this.apiKey, this.provider = 'claude'});
+  const SaveAiApiKeyEvent({required this.apiKey, this.provider = 'gemini'});
 
   @override
   List<Object?> get props => [apiKey, provider];

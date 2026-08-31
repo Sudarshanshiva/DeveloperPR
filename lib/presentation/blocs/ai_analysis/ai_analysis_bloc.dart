@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/error/failure.dart';
+import '../../../domain/entities/user_quota.dart';
 import '../../../domain/repositories/ai_analysis_repository.dart';
 import '../../../domain/usecases/analyze_pull_request_usecase.dart';
 import 'ai_analysis_event.dart';
@@ -14,6 +15,8 @@ class AiAnalysisBloc extends Bloc<AiAnalysisEvent, AiAnalysisState> {
     required this.analyzePullRequestUseCase,
   }) : super(AiAnalysisInitial()) {
     on<CheckAiApiKeyStatusEvent>(_onCheckApiKeyStatus);
+    on<CheckUserQuotaEvent>(_onCheckUserQuota);
+    on<UnlockProSubscriptionEvent>(_onUnlockProSubscription);
     on<SaveAiApiKeyEvent>(_onSaveApiKey);
     on<DeleteAiApiKeyEvent>(_onDeleteApiKey);
     on<RunAiAnalysisEvent>(_onRunAiAnalysis);
@@ -23,20 +26,53 @@ class AiAnalysisBloc extends Bloc<AiAnalysisEvent, AiAnalysisState> {
     CheckAiApiKeyStatusEvent event,
     Emitter<AiAnalysisState> emit,
   ) async {
-    final keyResult = await repository.getApiKey();
     final providerResult = await repository.getApiProvider();
-    final provider = providerResult.getOrElse((_) => 'claude');
-
-    keyResult.fold(
-      (failure) => emit(AiAnalysisNoKeyConfigured(provider: provider)),
-      (key) {
-        if (key != null && key.trim().isNotEmpty) {
-          emit(AiAnalysisReadyToAnalyze(provider: provider));
-        } else {
-          emit(AiAnalysisNoKeyConfigured(provider: provider));
-        }
-      },
+    final provider = providerResult.getOrElse((_) => 'gemini');
+    final quotaResult = await repository.getUserQuota();
+    
+    final quota = quotaResult.getOrElse(
+      (_) => const UserQuota(usedToday: 0, maxDailyFree: 3, isProMember: false, hasCustomKey: false),
     );
+
+    // If quota is exhausted and user has no custom key / Pro status
+    if (!quota.canAnalyze) {
+      emit(AiAnalysisQuotaExceededState(
+        message: 'Daily free AI PR review limit reached (3/3 used today).',
+        quota: quota,
+      ));
+    } else {
+      emit(AiAnalysisReadyToAnalyze(provider: provider, quota: quota));
+    }
+  }
+
+  Future<void> _onCheckUserQuota(
+    CheckUserQuotaEvent event,
+    Emitter<AiAnalysisState> emit,
+  ) async {
+    final providerResult = await repository.getApiProvider();
+    final provider = providerResult.getOrElse((_) => 'gemini');
+    final quotaResult = await repository.getUserQuota();
+
+    final quota = quotaResult.getOrElse(
+      (_) => const UserQuota(usedToday: 0, maxDailyFree: 3, isProMember: false, hasCustomKey: false),
+    );
+
+    if (!quota.canAnalyze) {
+      emit(AiAnalysisQuotaExceededState(
+        message: 'Daily free AI PR review limit reached (3/3 used today).',
+        quota: quota,
+      ));
+    } else {
+      emit(AiAnalysisReadyToAnalyze(provider: provider, quota: quota));
+    }
+  }
+
+  Future<void> _onUnlockProSubscription(
+    UnlockProSubscriptionEvent event,
+    Emitter<AiAnalysisState> emit,
+  ) async {
+    await repository.unlockProSubscription();
+    add(CheckAiApiKeyStatusEvent());
   }
 
   Future<void> _onSaveApiKey(
@@ -46,7 +82,7 @@ class AiAnalysisBloc extends Bloc<AiAnalysisEvent, AiAnalysisState> {
     final result = await repository.saveApiKey(event.apiKey, provider: event.provider);
     result.fold(
       (failure) => emit(AiAnalysisError(message: failure.message)),
-      (_) => emit(AiAnalysisReadyToAnalyze(provider: event.provider)),
+      (_) => add(CheckAiApiKeyStatusEvent()),
     );
   }
 
@@ -54,10 +90,8 @@ class AiAnalysisBloc extends Bloc<AiAnalysisEvent, AiAnalysisState> {
     DeleteAiApiKeyEvent event,
     Emitter<AiAnalysisState> emit,
   ) async {
-    final providerResult = await repository.getApiProvider();
-    final provider = providerResult.getOrElse((_) => 'claude');
     await repository.deleteApiKey();
-    emit(AiAnalysisNoKeyConfigured(provider: provider));
+    add(CheckAiApiKeyStatusEvent());
   }
 
   Future<void> _onRunAiAnalysis(
@@ -65,7 +99,19 @@ class AiAnalysisBloc extends Bloc<AiAnalysisEvent, AiAnalysisState> {
     Emitter<AiAnalysisState> emit,
   ) async {
     final providerResult = await repository.getApiProvider();
-    final provider = providerResult.getOrElse((_) => 'claude');
+    final provider = providerResult.getOrElse((_) => 'gemini');
+    final quotaResult = await repository.getUserQuota();
+    final quota = quotaResult.getOrElse(
+      (_) => const UserQuota(usedToday: 0, maxDailyFree: 3, isProMember: false, hasCustomKey: false),
+    );
+
+    if (!quota.canAnalyze) {
+      emit(AiAnalysisQuotaExceededState(
+        message: 'Daily free AI PR review limit reached (3/3 used today).',
+        quota: quota,
+      ));
+      return;
+    }
 
     emit(const AiAnalysisLoading(message: 'Analyzing PR code diffs & assessing risks...'));
 
@@ -81,15 +127,24 @@ class AiAnalysisBloc extends Bloc<AiAnalysisEvent, AiAnalysisState> {
       ),
     );
 
+    // Refresh quota after analysis
+    final updatedQuotaResult = await repository.getUserQuota();
+    final updatedQuota = updatedQuotaResult.getOrElse((_) => quota);
+
     result.fold(
       (failure) {
-        if (failure is AuthFailure) {
+        if (failure is QuotaExceededFailure) {
+          emit(AiAnalysisQuotaExceededState(
+            message: failure.message,
+            quota: updatedQuota,
+          ));
+        } else if (failure is AuthFailure) {
           emit(AiAnalysisError(message: failure.message, isAuthError: true));
         } else {
           emit(AiAnalysisError(message: failure.message));
         }
       },
-      (analysis) => emit(AiAnalysisLoaded(result: analysis, provider: provider)),
+      (analysis) => emit(AiAnalysisLoaded(result: analysis, provider: provider, quota: updatedQuota)),
     );
   }
 }
