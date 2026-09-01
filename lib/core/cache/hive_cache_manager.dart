@@ -81,6 +81,37 @@ class HiveCacheManager {
     return null;
   }
 
+  // Freemium Quota & Pro Membership Tracking
+  String _todayDateKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  int getDailyFreeAiUsage() {
+    final storedDate = aiAnalysisBox.get('free_quota_date') as String?;
+    final today = _todayDateKey();
+    if (storedDate != today) {
+      // Reset for new day
+      aiAnalysisBox.put('free_quota_date', today);
+      aiAnalysisBox.put('free_quota_count', 0);
+      return 0;
+    }
+    return (aiAnalysisBox.get('free_quota_count') as int?) ?? 0;
+  }
+
+  Future<void> incrementDailyFreeAiUsage() async {
+    final current = getDailyFreeAiUsage();
+    await aiAnalysisBox.put('free_quota_count', current + 1);
+  }
+
+  bool isProStatus() {
+    return (aiAnalysisBox.get('is_pro_member') as bool?) ?? false;
+  }
+
+  Future<void> setProStatus(bool isPro) async {
+    await aiAnalysisBox.put('is_pro_member', isPro);
+  }
+
   Future<void> clearAllCache() async {
     await reposBox.clear();
     await prsBox.clear();

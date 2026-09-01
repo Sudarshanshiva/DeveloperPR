@@ -2,6 +2,7 @@ import 'package:fpdart/fpdart.dart';
 import '../../core/error/failure.dart';
 import '../entities/file_change.dart';
 import '../entities/pr_analysis.dart';
+import '../entities/user_quota.dart';
 
 abstract class AiAnalysisRepository {
   Future<Either<Failure, PRAnalysisResult>> analyzePullRequest({
@@ -18,4 +19,8 @@ abstract class AiAnalysisRepository {
   Future<Either<Failure, String?>> getApiKey();
   Future<Either<Failure, String>> getApiProvider();
   Future<Either<Failure, void>> deleteApiKey();
+
+  Future<Either<Failure, UserQuota>> getUserQuota();
+  Future<Either<Failure, void>> unlockProSubscription();
 }
+

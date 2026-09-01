@@ -35,3 +35,12 @@ class RateLimitFailure extends Failure {
 class AuthFailure extends Failure {
   const AuthFailure([super.message = 'Invalid GitHub Personal Access Token or Token expired.']);
 }
+
+class QuotaExceededFailure extends Failure {
+  final int remainingFreeCount;
+  const QuotaExceededFailure(super.message, {this.remainingFreeCount = 0});
+
+  @override
+  List<Object?> get props => [message, remainingFreeCount];
+}
+

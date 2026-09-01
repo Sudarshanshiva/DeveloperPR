@@ -6,6 +6,7 @@ import '../../core/error/exceptions.dart';
 import '../../core/error/failure.dart';
 import '../../domain/entities/file_change.dart';
 import '../../domain/entities/pr_analysis.dart';
+import '../../domain/entities/user_quota.dart';
 import '../../domain/repositories/ai_analysis_repository.dart';
 import '../datasources/ai_remote_datasource.dart';
 import '../models/pr_analysis_model.dart';
@@ -25,6 +26,37 @@ class AiAnalysisRepositoryImpl implements AiAnalysisRepository {
   });
 
   @override
+  Future<Either<Failure, UserQuota>> getUserQuota() async {
+    try {
+      final key = await secureStorage.read(key: _apiKeyStorageKey);
+      final hasCustomKey = key != null && key.trim().isNotEmpty;
+      final isPro = cacheManager.isProStatus();
+      final usedToday = cacheManager.getDailyFreeAiUsage();
+
+      return Right(
+        UserQuota(
+          usedToday: usedToday,
+          maxDailyFree: 3,
+          isProMember: isPro,
+          hasCustomKey: hasCustomKey,
+        ),
+      );
+    } catch (e) {
+      return Left(CacheFailure('Failed to get quota status: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> unlockProSubscription() async {
+    try {
+      await cacheManager.setProStatus(true);
+      return const Right(null);
+    } catch (e) {
+      return Left(CacheFailure('Failed to unlock Pro subscription: $e'));
+    }
+  }
+
+  @override
   Future<Either<Failure, PRAnalysisResult>> analyzePullRequest({
     required String owner,
     required String repo,
@@ -35,12 +67,20 @@ class AiAnalysisRepositoryImpl implements AiAnalysisRepository {
     bool forceRefresh = false,
   }) async {
     try {
-      final apiKey = await secureStorage.read(key: _apiKeyStorageKey);
-      if (apiKey == null || apiKey.trim().isEmpty) {
-        return const Left(AuthFailure('No AI API Key configured. Please add your Claude or OpenAI API key in settings.'));
+      final customKey = await secureStorage.read(key: _apiKeyStorageKey);
+      final hasCustomKey = customKey != null && customKey.trim().isNotEmpty;
+      final isPro = cacheManager.isProStatus();
+      final usedToday = cacheManager.getDailyFreeAiUsage();
+
+      // Check quota if not Pro and no custom key
+      if (!isPro && !hasCustomKey && usedToday >= 3) {
+        return const Left(QuotaExceededFailure(
+          'Daily free AI PR review limit reached (3/3 used today).',
+          remainingFreeCount: 0,
+        ));
       }
 
-      final provider = (await secureStorage.read(key: _apiProviderStorageKey)) ?? 'claude';
+      final provider = (await secureStorage.read(key: _apiProviderStorageKey)) ?? 'gemini';
       final cacheKey = '${owner}_${repo}_${prNumber}_${files.length}';
 
       if (!forceRefresh) {
@@ -50,15 +90,23 @@ class AiAnalysisRepositoryImpl implements AiAnalysisRepository {
         }
       }
 
+      // Key to use: custom key if present, otherwise fallback to datasource default or check auth
+      final effectiveKey = hasCustomKey ? customKey.trim() : '';
+
       final result = await remoteDataSource.analyzePullRequest(
-        apiKey: apiKey.trim(),
+        apiKey: effectiveKey,
         provider: provider,
         prTitle: prTitle,
         prDescription: prDescription,
         files: files,
       );
 
+      // Cache result and increment free usage if using free tier
       await cacheManager.cacheAiAnalysis(cacheKey, result.toCacheJson());
+      if (!isPro && !hasCustomKey) {
+        await cacheManager.incrementDailyFreeAiUsage();
+      }
+
       return Right(result);
     } on AuthException catch (e) {
       return Left(AuthFailure(e.message));
@@ -72,7 +120,7 @@ class AiAnalysisRepositoryImpl implements AiAnalysisRepository {
   }
 
   @override
-  Future<Either<Failure, void>> saveApiKey(String apiKey, {String provider = 'claude'}) async {
+  Future<Either<Failure, void>> saveApiKey(String apiKey, {String provider = 'gemini'}) async {
     try {
       await secureStorage.write(key: _apiKeyStorageKey, value: apiKey.trim());
       await secureStorage.write(key: _apiProviderStorageKey, value: provider.toLowerCase());
@@ -96,9 +144,9 @@ class AiAnalysisRepositoryImpl implements AiAnalysisRepository {
   Future<Either<Failure, String>> getApiProvider() async {
     try {
       final provider = await secureStorage.read(key: _apiProviderStorageKey);
-      return Right(provider ?? 'claude');
+      return Right(provider ?? 'gemini');
     } catch (_) {
-      return const Right('claude');
+      return const Right('gemini');
     }
   }
 

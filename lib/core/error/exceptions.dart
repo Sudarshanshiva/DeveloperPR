@@ -24,3 +24,9 @@ class NetworkException implements Exception {
   final String message;
   NetworkException([this.message = 'No Network Connection']);
 }
+
+class QuotaExceededException implements Exception {
+  final String message;
+  QuotaExceededException([this.message = 'Daily free AI quota exceeded']);
+}
+

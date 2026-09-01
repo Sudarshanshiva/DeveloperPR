@@ -5,9 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/entities/file_change.dart';
 import '../../domain/entities/pr_analysis.dart';
+import '../../domain/entities/user_quota.dart';
 import '../blocs/ai_analysis/ai_analysis_bloc.dart';
 import '../blocs/ai_analysis/ai_analysis_event.dart';
 import '../blocs/ai_analysis/ai_analysis_state.dart';
+import 'premium_upgrade_modal.dart';
 
 class AIReviewTab extends StatefulWidget {
   final String owner;
@@ -142,7 +144,12 @@ class _AIReviewTabState extends State<AIReviewTab> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: BlocBuilder<AiAnalysisBloc, AiAnalysisState>(
+      child: BlocConsumer<AiAnalysisBloc, AiAnalysisState>(
+        listener: (context, state) {
+          if (state is AiAnalysisQuotaExceededState) {
+            PremiumUpgradeModal.show(context, state.quota);
+          }
+        },
         builder: (context, state) {
           if (state is AiAnalysisInitial) {
             return const Center(
@@ -158,7 +165,11 @@ class _AIReviewTabState extends State<AIReviewTab> {
           }
 
           if (state is AiAnalysisReadyToAnalyze) {
-            return _buildReadyToAnalyzeCard(context, provider: state.provider);
+            return _buildReadyToAnalyzeCard(context, provider: state.provider, quota: state.quota);
+          }
+
+          if (state is AiAnalysisQuotaExceededState) {
+            return _buildQuotaExceededCard(context, quota: state.quota);
           }
 
           if (state is AiAnalysisLoading) {
@@ -166,7 +177,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
           }
 
           if (state is AiAnalysisLoaded) {
-            return _buildAnalysisResultsView(context, result: state.result, provider: state.provider);
+            return _buildAnalysisResultsView(context, result: state.result, provider: state.provider, quota: state.quota);
           }
 
           if (state is AiAnalysisError) {
@@ -315,7 +326,80 @@ class _AIReviewTabState extends State<AIReviewTab> {
     );
   }
 
-  Widget _buildReadyToAnalyzeCard(BuildContext context, {required String provider}) {
+  Widget _buildQuotaBadge(UserQuota quota) {
+    if (quota.isProMember) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.amber.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.workspace_premium_rounded, size: 14, color: Colors.amber),
+            SizedBox(width: 6),
+            Text(
+              'PRO MEMBER · UNLIMITED AI REVIEWS',
+              style: TextStyle(fontSize: 11, color: Colors.amber, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (quota.hasCustomKey) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.key_rounded, size: 14, color: Colors.green),
+            SizedBox(width: 6),
+            Text(
+              'CUSTOM KEY · UNLIMITED FREE REVIEWS',
+              style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final remaining = quota.remainingFree;
+    final isLow = remaining <= 1;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: (isLow ? Colors.orange : Colors.blue).withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: (isLow ? Colors.orange : Colors.blue).withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bolt_rounded, size: 14, color: isLow ? Colors.orange : Colors.blue),
+          const SizedBox(width: 6),
+          Text(
+            '⚡ $remaining / ${quota.maxDailyFree} FREE DAILY REVIEWS LEFT',
+            style: TextStyle(
+              fontSize: 11,
+              color: isLow ? Colors.orange : Colors.blue,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadyToAnalyzeCard(BuildContext context, {required String provider, required UserQuota quota}) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -324,6 +408,8 @@ class _AIReviewTabState extends State<AIReviewTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            _buildQuotaBadge(quota),
+            const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -365,11 +451,53 @@ class _AIReviewTabState extends State<AIReviewTab> {
             ),
             const SizedBox(height: 16),
             TextButton.icon(
-              onPressed: () {
-                context.read<AiAnalysisBloc>().add(DeleteAiApiKeyEvent());
-              },
-              icon: const Icon(Icons.settings_rounded, size: 16),
-              label: const Text('Change API Key / Settings', style: TextStyle(fontSize: 12)),
+              onPressed: () => PremiumUpgradeModal.show(context, quota),
+              icon: const Icon(Icons.workspace_premium_rounded, size: 16, color: Colors.amber),
+              label: const Text('Upgrade to Pro / API Settings', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuotaExceededCard(BuildContext context, {required UserQuota quota}) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 40),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Daily Free AI Quota Used (3/3)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'You have reached your 3 free daily AI reviews limit. Upgrade to Pro for unlimited reviews or bring your own free Gemini API key!',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => PremiumUpgradeModal.show(context, quota),
+              icon: const Icon(Icons.bolt_rounded),
+              label: const Text('Unlock Unlimited AI Reviews'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
             ),
           ],
         ),
@@ -412,6 +540,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
     BuildContext context, {
     required PRAnalysisResult result,
     required String provider,
+    required UserQuota quota,
   }) {
     final isLowRisk = result.riskLevel == 'low';
     final isMediumRisk = result.riskLevel == 'medium';
@@ -651,11 +780,9 @@ class _AIReviewTabState extends State<AIReviewTab> {
         const SizedBox(height: 24),
         Center(
           child: TextButton.icon(
-            onPressed: () {
-              context.read<AiAnalysisBloc>().add(DeleteAiApiKeyEvent());
-            },
-            icon: const Icon(Icons.settings_rounded, size: 16),
-            label: const Text('Change AI Provider / Key', style: TextStyle(fontSize: 12)),
+            onPressed: () => PremiumUpgradeModal.show(context, quota),
+            icon: const Icon(Icons.workspace_premium_rounded, size: 16, color: Colors.amber),
+            label: const Text('Upgrade to Pro / API Settings', style: TextStyle(fontSize: 12)),
           ),
         ),
         const SizedBox(height: 32),
