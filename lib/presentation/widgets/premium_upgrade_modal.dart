@@ -33,7 +33,7 @@ class PremiumUpgradeModal extends StatefulWidget {
 class _PremiumUpgradeModalState extends State<PremiumUpgradeModal> {
   bool _showCustomKeyInput = false;
   final _keyController = TextEditingController();
-  String _selectedProvider = 'gemini';
+
 
   @override
   void dispose() {
@@ -222,7 +222,7 @@ class _PremiumUpgradeModalState extends State<PremiumUpgradeModal> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Provide your own free Gemini or Groq key to enjoy unlimited free reviews forever.',
+                    'Provide your own free Google Gemini key to enjoy unlimited free reviews forever.',
                     style: TextStyle(fontSize: 12, color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7)),
                   ),
                   const SizedBox(height: 12),
@@ -235,25 +235,17 @@ class _PremiumUpgradeModalState extends State<PremiumUpgradeModal> {
                         });
                       },
                       icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Add My Own Free API Key'),
+                      label: const Text('Add My Free Gemini API Key'),
                     )
                   else ...[
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'gemini', label: Text('Gemini (Free)'), icon: Icon(Icons.auto_awesome_rounded)),
-                        ButtonSegment(value: 'groq', label: Text('Groq (Free)'), icon: Icon(Icons.bolt_rounded)),
-                      ],
-                      selected: {_selectedProvider},
-                      onSelectionChanged: (set) => setState(() => _selectedProvider = set.first),
-                    ),
-                    const SizedBox(height: 10),
                     TextField(
                       controller: _keyController,
                       obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: _selectedProvider == 'gemini' ? 'Gemini API Key (AIza...)' : 'Groq API Key (gsk_...)',
-                        prefixIcon: const Icon(Icons.key_rounded),
-                        border: const OutlineInputBorder(),
+                      decoration: const InputDecoration(
+                        labelText: 'Gemini API Key (AIzaSy...)',
+                        hintText: 'AIzaSy...',
+                        prefixIcon: Icon(Icons.key_rounded),
+                        border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -261,12 +253,7 @@ class _PremiumUpgradeModalState extends State<PremiumUpgradeModal> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         TextButton(
-                          onPressed: () {
-                            final url = _selectedProvider == 'gemini'
-                                ? 'https://aistudio.google.com/app/apikey'
-                                : 'https://console.groq.com/keys';
-                            launchUrl(Uri.parse(url));
-                          },
+                          onPressed: () => launchUrl(Uri.parse('https://aistudio.google.com/app/apikey')),
                           child: const Text('Get Free Key →', style: TextStyle(fontSize: 12)),
                         ),
                         ElevatedButton(
@@ -274,12 +261,12 @@ class _PremiumUpgradeModalState extends State<PremiumUpgradeModal> {
                             final key = _keyController.text.trim();
                             if (key.isNotEmpty) {
                               context.read<AiAnalysisBloc>().add(
-                                    SaveAiApiKeyEvent(apiKey: key, provider: _selectedProvider),
+                                    SaveAiApiKeyEvent(apiKey: key, provider: 'gemini'),
                                   );
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Custom API Key saved! Unlimited reviews enabled.'),
+                                  content: Text('Gemini API Key saved! Unlimited reviews enabled.'),
                                   backgroundColor: Colors.green,
                                 ),
                               );

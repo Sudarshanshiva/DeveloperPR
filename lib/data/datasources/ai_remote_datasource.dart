@@ -7,7 +7,7 @@ import '../models/pr_analysis_model.dart';
 abstract class AiRemoteDataSource {
   Future<PRAnalysisResultModel> analyzePullRequest({
     required String apiKey,
-    required String provider, // 'gemini' | 'groq' | 'claude' | 'openai'
+    required String provider,
     required String prTitle,
     String? prDescription,
     required List<FileChange> files,
@@ -35,21 +35,12 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
       files: files,
     );
 
-    switch (provider.toLowerCase()) {
-      case 'gemini':
-        return _callGeminiApi(
-            apiKey: apiKey, prompt: promptContent, isTruncated: isTruncated, analyzedCount: analyzedCount);
-      case 'groq':
-        return _callGroqApi(
-            apiKey: apiKey, prompt: promptContent, isTruncated: isTruncated, analyzedCount: analyzedCount);
-      case 'openai':
-        return _callOpenAiApi(
-            apiKey: apiKey, prompt: promptContent, isTruncated: isTruncated, analyzedCount: analyzedCount);
-      case 'claude':
-      default:
-        return _callClaudeApi(
-            apiKey: apiKey, prompt: promptContent, isTruncated: isTruncated, analyzedCount: analyzedCount);
-    }
+    return _callGeminiApi(
+      apiKey: apiKey,
+      prompt: promptContent,
+      isTruncated: isTruncated,
+      analyzedCount: analyzedCount,
+    );
   }
 
   (String prompt, bool isTruncated, int analyzedCount) _buildPrompt({
@@ -137,16 +128,65 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
     return (buffer.toString(), isTruncated, analyzedCount);
   }
 
-  // ─── Gemini (FREE - Recommended) ───────────────────────────────────────────
+  // ─── Google Gemini (100% FREE - Primary AI Engine) ─────────────────────────
+
+  /// Fetches the list of models available for this API key and returns
+  /// the first one that supports generateContent, preferring flash variants.
+  Future<String> _discoverGeminiModel(String apiKey) async {
+    final listUrl =
+        'https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey';
+    try {
+      final res = await dio.get(listUrl,
+          options: Options(headers: {'content-type': 'application/json'}));
+      if (res.statusCode == 200) {
+        final models = (res.data['models'] as List?) ?? [];
+        // Build preferred order — flash is fast & free, then pro
+        final preferred = [
+          'gemini-2.0-flash',
+          'gemini-2.0-flash-lite',
+          'gemini-1.5-flash',
+          'gemini-1.5-flash-latest',
+          'gemini-1.5-flash-8b',
+          'gemini-1.5-pro',
+          'gemini-1.5-pro-latest',
+        ];
+        final available = models
+            .where((m) {
+              final methods =
+                  (m['supportedGenerationMethods'] as List?)?.cast<String>() ?? [];
+              return methods.contains('generateContent');
+            })
+            .map((m) => (m['name'] as String).replaceFirst('models/', ''))
+            .toList();
+
+        for (final pref in preferred) {
+          if (available.any((a) => a == pref || a.startsWith(pref))) {
+            return available.firstWhere((a) => a == pref || a.startsWith(pref));
+          }
+        }
+        // Fallback: any available generateContent model
+        if (available.isNotEmpty) return available.first;
+      }
+    } catch (_) {
+      // ignore — fall through to default
+    }
+    return 'gemini-2.0-flash'; // best-effort default
+  }
+
   Future<PRAnalysisResultModel> _callGeminiApi({
     required String apiKey,
     required String prompt,
     required bool isTruncated,
     required int analyzedCount,
   }) async {
+    // Discover which model this API key actually supports
+    final model = await _discoverGeminiModel(apiKey);
+    final url =
+        'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey';
+
     try {
       final response = await dio.post(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey',
+        url,
         options: Options(headers: {'content-type': 'application/json'}),
         data: {
           'contents': [
@@ -157,7 +197,6 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
             }
           ],
           'generationConfig': {
-            'response_mime_type': 'application/json',
             'temperature': 0.2,
             'maxOutputTokens': 1500,
           },
@@ -179,201 +218,30 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
           }
         }
       }
-      throw ServerException('Invalid response from Gemini API', statusCode: response.statusCode);
+      throw ServerException('Invalid response from Gemini API',
+          statusCode: response.statusCode);
     } on DioException catch (e) {
-      if (e.response?.statusCode == 400) {
-        final msg = e.response?.data?['error']?['message']?.toString() ?? '';
-        if (msg.toLowerCase().contains('api key')) {
-          throw AuthException('Invalid Gemini API Key. Get a free key at aistudio.google.com');
-        }
+      final statusCode = e.response?.statusCode ?? 0;
+      final msg =
+          e.response?.data?['error']?['message']?.toString() ?? e.message ?? '';
+
+      if (statusCode == 401 || statusCode == 403 ||
+          (statusCode == 400 &&
+              (msg.toLowerCase().contains('api key') ||
+                  msg.toLowerCase().contains('invalid')))) {
+        throw AuthException(
+            'Invalid Gemini API Key. Get a free key at aistudio.google.com');
       }
-      if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
-        throw AuthException('Invalid Gemini API Key. Get a free key at aistudio.google.com');
-      }
-      if (e.response?.statusCode == 429) {
-        final retryAfter = int.tryParse(e.response?.headers.value('retry-after') ?? '') ?? 0;
+      if (statusCode == 429) {
+        final retryAfter =
+            int.tryParse(e.response?.headers.value('retry-after') ?? '') ?? 0;
         throw RateLimitException(
-          'Gemini rate limit reached. Free tier allows 15 requests/min — please wait a moment.',
+          'Gemini rate limit reached. Free tier: 15 req/min — wait a moment.',
           resetTimestamp: retryAfter,
         );
       }
-      throw ServerException(
-        e.response?.data?['error']?['message']?.toString() ?? e.message ?? 'Failed to connect to Gemini API',
-        statusCode: e.response?.statusCode,
-      );
-    }
-  }
-
-  // ─── Groq (FREE - Ultra Fast) ───────────────────────────────────────────────
-  Future<PRAnalysisResultModel> _callGroqApi({
-    required String apiKey,
-    required String prompt,
-    required bool isTruncated,
-    required int analyzedCount,
-  }) async {
-    try {
-      final response = await dio.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $apiKey',
-            'content-type': 'application/json',
-          },
-        ),
-        data: {
-          'model': 'llama-3.1-8b-instant',
-          'response_format': {'type': 'json_object'},
-          'messages': [
-            {'role': 'system', 'content': 'You are a senior code reviewer. Analyze the diff and return JSON only.'},
-            {'role': 'user', 'content': prompt},
-          ],
-          'max_tokens': 1500,
-          'temperature': 0.2,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final choices = response.data['choices'] as List?;
-        if (choices != null && choices.isNotEmpty) {
-          final rawText = choices.first['message']['content']?.toString() ?? '';
-          final jsonMap = _parseJsonResponse(rawText);
-          return PRAnalysisResultModel.fromJson(
-            jsonMap,
-            isTruncated: isTruncated,
-            analyzedFileCount: analyzedCount,
-          );
-        }
-      }
-      throw ServerException('Invalid response from Groq API', statusCode: response.statusCode);
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        throw AuthException('Invalid Groq API Key. Get a free key at console.groq.com');
-      }
-      if (e.response?.statusCode == 429) {
-        final retryAfter = int.tryParse(e.response?.headers.value('retry-after') ?? '') ?? 0;
-        throw RateLimitException(
-          'Groq rate limit reached. Free tier allows 30 req/min — please wait a moment.',
-          resetTimestamp: retryAfter,
-        );
-      }
-      throw ServerException(
-        e.response?.data?['error']?['message']?.toString() ?? e.message ?? 'Failed to connect to Groq API',
-        statusCode: e.response?.statusCode,
-      );
-    }
-  }
-
-  // ─── Claude (Paid) ──────────────────────────────────────────────────────────
-  Future<PRAnalysisResultModel> _callClaudeApi({
-    required String apiKey,
-    required String prompt,
-    required bool isTruncated,
-    required int analyzedCount,
-  }) async {
-    try {
-      final response = await dio.post(
-        'https://api.anthropic.com/v1/messages',
-        options: Options(
-          headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json',
-          },
-        ),
-        data: {
-          'model': 'claude-3-5-sonnet-20241022',
-          'max_tokens': 1500,
-          'messages': [
-            {'role': 'user', 'content': prompt}
-          ],
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final contentList = response.data['content'] as List?;
-        if (contentList != null && contentList.isNotEmpty) {
-          final rawText = contentList.first['text']?.toString() ?? '';
-          final jsonMap = _parseJsonResponse(rawText);
-          return PRAnalysisResultModel.fromJson(
-            jsonMap,
-            isTruncated: isTruncated,
-            analyzedFileCount: analyzedCount,
-          );
-        }
-      }
-      throw ServerException('Invalid response from Claude API', statusCode: response.statusCode);
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        throw AuthException('Invalid Claude API Key. Please check your key in settings.');
-      }
-      if (e.response?.statusCode == 429) {
-        final retryAfter = int.tryParse(e.response?.headers.value('retry-after') ?? '') ?? 0;
-        throw RateLimitException(
-          'Claude API rate limit reached. Please wait a moment and try again.',
-          resetTimestamp: retryAfter,
-        );
-      }
-      throw ServerException(
-        e.response?.data?['error']?['message']?.toString() ?? e.message ?? 'Failed to connect to Claude API',
-        statusCode: e.response?.statusCode,
-      );
-    }
-  }
-
-  // ─── OpenAI (Paid) ──────────────────────────────────────────────────────────
-  Future<PRAnalysisResultModel> _callOpenAiApi({
-    required String apiKey,
-    required String prompt,
-    required bool isTruncated,
-    required int analyzedCount,
-  }) async {
-    try {
-      final response = await dio.post(
-        'https://api.openai.com/v1/chat/completions',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $apiKey',
-            'content-type': 'application/json',
-          },
-        ),
-        data: {
-          'model': 'gpt-3.5-turbo',
-          'response_format': {'type': 'json_object'},
-          'messages': [
-            {'role': 'system', 'content': 'You are a senior code reviewer. Analyze the diff and return JSON.'},
-            {'role': 'user', 'content': prompt}
-          ],
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final choices = response.data['choices'] as List?;
-        if (choices != null && choices.isNotEmpty) {
-          final rawText = choices.first['message']['content']?.toString() ?? '';
-          final jsonMap = _parseJsonResponse(rawText);
-          return PRAnalysisResultModel.fromJson(
-            jsonMap,
-            isTruncated: isTruncated,
-            analyzedFileCount: analyzedCount,
-          );
-        }
-      }
-      throw ServerException('Invalid response from OpenAI API', statusCode: response.statusCode);
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        throw AuthException('Invalid OpenAI API Key. Please check your key in settings.');
-      }
-      if (e.response?.statusCode == 429) {
-        final retryAfter = int.tryParse(e.response?.headers.value('retry-after') ?? '') ?? 0;
-        throw RateLimitException(
-          'OpenAI API rate limit reached. Please wait a moment and try again.',
-          resetTimestamp: retryAfter,
-        );
-      }
-      throw ServerException(
-        e.response?.data?['error']?['message']?.toString() ?? e.message ?? 'Failed to connect to OpenAI API',
-        statusCode: e.response?.statusCode,
-      );
+      throw ServerException(msg.isNotEmpty ? msg : 'Failed to connect to Gemini API',
+          statusCode: statusCode);
     }
   }
 
