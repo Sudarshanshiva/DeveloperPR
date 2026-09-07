@@ -35,7 +35,6 @@ class AIReviewTab extends StatefulWidget {
 
 class _AIReviewTabState extends State<AIReviewTab> {
   final _keyController = TextEditingController();
-  String _selectedProvider = 'gemini';
 
   @override
   void initState() {
@@ -49,96 +48,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
     super.dispose();
   }
 
-  // ── Provider helpers ────────────────────────────────────────────────────────
 
-  String _providerDisplayName(String p) {
-    switch (p) {
-      case 'gemini': return 'Gemini Flash';
-      case 'groq': return 'Groq Llama';
-      case 'claude': return 'Claude';
-      case 'openai': return 'OpenAI GPT';
-      default: return p;
-    }
-  }
-
-  String _keyLabel(String p) {
-    switch (p) {
-      case 'gemini': return 'Gemini API Key (AIza...)';
-      case 'groq': return 'Groq API Key (gsk_...)';
-      case 'claude': return 'Claude API Key (sk-ant-...)';
-      default: return 'OpenAI API Key (sk-...)';
-    }
-  }
-
-  String _keyHint(String p) {
-    switch (p) {
-      case 'gemini': return 'AIzaSy...';
-      case 'groq': return 'gsk_live_...';
-      case 'claude': return 'sk-ant-api03-...';
-      default: return 'sk-...';
-    }
-  }
-
-  String _keyUrl(String p) {
-    switch (p) {
-      case 'gemini': return 'https://aistudio.google.com/app/apikey';
-      case 'groq': return 'https://console.groq.com/keys';
-      case 'claude': return 'https://console.anthropic.com/settings/keys';
-      default: return 'https://platform.openai.com/api-keys';
-    }
-  }
-
-  Widget _providerChip(
-    BuildContext context, {
-    required String value,
-    required String label,
-    required String subtitle,
-    required IconData icon,
-    required bool isFree,
-  }) {
-    final isSelected = _selectedProvider == value;
-    final color = isSelected ? Theme.of(context).colorScheme.primary : Colors.grey.shade600;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedProvider = value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
-              : Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey.withValues(alpha: 0.3),
-            width: isSelected ? 1.8 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: color)),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isFree ? Colors.green : Colors.grey.shade500,
-                      fontWeight: isFree ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +122,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'Configure AI Reviewer',
+                    'Configure Google Gemini AI',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -220,26 +130,25 @@ class _AIReviewTabState extends State<AIReviewTab> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Choose a FREE AI provider below to get automated code review, risk detection, and issue flagging — no credit card needed.',
+              'Add your Google Gemini API key to enable automated PR code reviews, risk level detection, bug flagging, and test coverage suggestions.',
               style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.8), height: 1.4),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             // Free badge
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.green.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
               ),
               child: const Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.star_rounded, size: 14, color: Colors.green),
-                  SizedBox(width: 6),
+                  Icon(Icons.star_rounded, size: 16, color: Colors.green),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Gemini & Groq are 100% free — no credit card required!',
+                      'Google Gemini is 100% FREE — Get key in 5 secs with zero credit card required!',
                       style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -248,38 +157,20 @@ class _AIReviewTabState extends State<AIReviewTab> {
             ),
             const SizedBox(height: 20),
 
-            // Provider selection — 2x2 grid
-            const Text('Select AI Provider', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 2.4,
-              children: [
-                _providerChip(context, value: 'gemini', label: 'Gemini Flash', subtitle: 'FREE · Google', icon: Icons.auto_awesome_rounded, isFree: true),
-                _providerChip(context, value: 'groq', label: 'Groq Llama', subtitle: 'FREE · Ultra Fast', icon: Icons.bolt_rounded, isFree: true),
-                _providerChip(context, value: 'claude', label: 'Claude 3.5', subtitle: 'Paid · Anthropic', icon: Icons.psychology_rounded, isFree: false),
-                _providerChip(context, value: 'openai', label: 'GPT-3.5', subtitle: 'Paid · OpenAI', icon: Icons.smart_toy_rounded, isFree: false),
-              ],
-            ),
-            const SizedBox(height: 16),
-
             TextField(
               controller: _keyController,
               obscureText: true,
-              decoration: InputDecoration(
-                labelText: _keyLabel(_selectedProvider),
-                hintText: _keyHint(_selectedProvider),
-                prefixIcon: const Icon(Icons.key_rounded),
+              decoration: const InputDecoration(
+                labelText: 'Gemini API Key (AIzaSy...)',
+                hintText: 'AIzaSy...',
+                prefixIcon: Icon(Icons.key_rounded),
+                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
 
             InkWell(
-              onTap: () => launchUrl(Uri.parse(_keyUrl(_selectedProvider))),
+              onTap: () => launchUrl(Uri.parse('https://aistudio.google.com/app/apikey')),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
@@ -287,7 +178,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
                     Icon(Icons.open_in_new_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 6),
                     Text(
-                      'Get FREE ${_providerDisplayName(_selectedProvider)} API Key →',
+                      'Get your FREE Gemini API Key from Google AI Studio →',
                       style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -301,12 +192,16 @@ class _AIReviewTabState extends State<AIReviewTab> {
                 final key = _keyController.text.trim();
                 if (key.isNotEmpty) {
                   context.read<AiAnalysisBloc>().add(
-                        SaveAiApiKeyEvent(apiKey: key, provider: _selectedProvider),
+                        SaveAiApiKeyEvent(apiKey: key, provider: 'gemini'),
                       );
                 }
               },
               icon: const Icon(Icons.save_rounded),
               label: const Text('Save Key & Continue'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -425,7 +320,7 @@ class _AIReviewTabState extends State<AIReviewTab> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Analyze ${widget.files.length} changed files with ${provider == 'gemini' ? 'Gemini 1.5 Flash (Free)' : provider == 'groq' ? 'Groq Llama 3.1 (Free)' : provider == 'claude' ? 'Claude 3.5 Sonnet' : 'GPT-3.5 Turbo'} for security vulnerabilities, memory leaks, architectural risks, and test coverage.',
+              'Analyze ${widget.files.length} changed files with Google Gemini 1.5 Flash (100% Free) for security vulnerabilities, memory leaks, architectural risks, and test coverage.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.75)),
             ),
