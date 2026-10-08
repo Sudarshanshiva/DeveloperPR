@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:fpdart/fpdart.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/cache/hive_cache_manager.dart';
 import '../../core/error/exceptions.dart';
 import '../../core/error/failure.dart';
@@ -90,8 +91,16 @@ class AiAnalysisRepositoryImpl implements AiAnalysisRepository {
         }
       }
 
-      // Key to use: custom key if present, otherwise fallback to datasource default or check auth
-      final effectiveKey = hasCustomKey ? customKey.trim() : '';
+      // Key to use: custom key if present, otherwise fallback to built-in default key
+      final effectiveKey = (hasCustomKey && customKey.trim().isNotEmpty)
+          ? customKey.trim()
+          : AppConfig.defaultGeminiApiKey;
+
+      if (effectiveKey.trim().isEmpty) {
+        return const Left(AuthFailure(
+          'No Gemini API Key found. Please enter your free key in settings or launch with --dart-define=GEMINI_API_KEY=your_key',
+        ));
+      }
 
       final result = await remoteDataSource.analyzePullRequest(
         apiKey: effectiveKey,

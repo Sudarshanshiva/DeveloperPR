@@ -34,9 +34,7 @@ class AiAnalysisBloc extends Bloc<AiAnalysisEvent, AiAnalysisState> {
       (_) => const UserQuota(usedToday: 0, maxDailyFree: 3, isProMember: false, hasCustomKey: false),
     );
 
-    if (!quota.hasCustomKey && !quota.isProMember) {
-      emit(AiAnalysisNoKeyConfigured(provider: provider, quota: quota));
-    } else if (!quota.canAnalyze) {
+    if (!quota.canAnalyze) {
       emit(AiAnalysisQuotaExceededState(
         message: 'Daily free AI PR review limit reached (3/3 used today).',
         quota: quota,
@@ -105,11 +103,6 @@ class AiAnalysisBloc extends Bloc<AiAnalysisEvent, AiAnalysisState> {
     final quota = quotaResult.getOrElse(
       (_) => const UserQuota(usedToday: 0, maxDailyFree: 3, isProMember: false, hasCustomKey: false),
     );
-
-    if (!quota.hasCustomKey && !quota.isProMember) {
-      emit(AiAnalysisNoKeyConfigured(provider: provider, quota: quota));
-      return;
-    }
 
     if (!quota.canAnalyze) {
       emit(AiAnalysisQuotaExceededState(

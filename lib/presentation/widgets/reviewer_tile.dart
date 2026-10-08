@@ -38,18 +38,22 @@ class ReviewerTile extends StatelessWidget {
         ),
         title: Row(
           children: [
-            Text(
-              review.userLogin,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            Expanded(
+              child: Text(
+                review.userLogin,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: badgeColor.withOpacity(0.15),
+                color: badgeColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(icon, size: 13, color: badgeColor),
                   const SizedBox(width: 4),

@@ -140,7 +140,7 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
           options: Options(headers: {'content-type': 'application/json'}));
       if (res.statusCode == 200) {
         final models = (res.data['models'] as List?) ?? [];
-        // Build preferred order — flash is fast & free, then pro
+        // Build preferred order — newest stable flash first, then pro
         final preferred = [
           'gemini-2.0-flash',
           'gemini-2.0-flash-lite',
@@ -150,11 +150,20 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
           'gemini-1.5-pro',
           'gemini-1.5-pro-latest',
         ];
+        // Models that appear in the list API but are no longer available
+        // for generateContent (return 404). Filter them out proactively.
+        const deprecated = [
+          'gemini-2.5-flash',
+          'gemini-2.5-pro',
+        ];
         final available = models
             .where((m) {
               final methods =
                   (m['supportedGenerationMethods'] as List?)?.cast<String>() ?? [];
-              return methods.contains('generateContent');
+              if (!methods.contains('generateContent')) return false;
+              final name = (m['name'] as String).replaceFirst('models/', '');
+              // Exclude any model whose name starts with a deprecated prefix
+              return !deprecated.any((d) => name == d || name.startsWith('$d-'));
             })
             .map((m) => (m['name'] as String).replaceFirst('models/', ''))
             .toList();
@@ -198,7 +207,8 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
           ],
           'generationConfig': {
             'temperature': 0.2,
-            'maxOutputTokens': 1500,
+            'maxOutputTokens': 4096,
+            'responseMimeType': 'application/json',
           },
         },
       );
@@ -208,7 +218,11 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
         if (candidates != null && candidates.isNotEmpty) {
           final parts = candidates.first['content']?['parts'] as List?;
           if (parts != null && parts.isNotEmpty) {
-            final rawText = parts.first['text']?.toString() ?? '';
+            // Thinking models include reasoning parts with "thought": true.
+            // Filter out thoughts to get the actual JSON response payload.
+            final nonThoughtParts = parts.where((p) => p is Map && p['thought'] != true).toList();
+            final targetPart = nonThoughtParts.isNotEmpty ? nonThoughtParts.last : parts.last;
+            final rawText = (targetPart as Map)['text']?.toString() ?? '';
             final jsonMap = _parseJsonResponse(rawText);
             return PRAnalysisResultModel.fromJson(
               jsonMap,
@@ -257,14 +271,93 @@ class AiRemoteDataSourceImpl implements AiRemoteDataSource {
     }
     cleanText = cleanText.trim();
 
+    // First attempt: Direct JSON parse
     try {
       final decoded = json.decode(cleanText);
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
-      return {};
     } catch (_) {
-      throw ServerException('Failed to parse AI response into JSON format.');
+      // Fall through to regex extraction
     }
+
+    // Fallback 1: Extract first '{' to last '}'
+    final firstBrace = cleanText.indexOf('{');
+    final lastBrace = cleanText.lastIndexOf('}');
+    if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+      final substring = cleanText.substring(firstBrace, lastBrace + 1);
+      try {
+        final decoded = json.decode(substring);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+      } catch (_) {}
+    }
+
+    // Fallback 2: Truncation Repair (if model hit maxOutputTokens)
+    if (firstBrace != -1) {
+      final repaired = _repairTruncatedJson(cleanText.substring(firstBrace));
+      try {
+        final decoded = json.decode(repaired);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+      } catch (_) {}
+    }
+
+    throw ServerException('Failed to parse AI response into JSON format.');
+  }
+
+  String _repairTruncatedJson(String jsonText) {
+    String repaired = jsonText.trim();
+
+    // Strip unclosed key or value at the end
+    repaired = repaired.replaceAll(RegExp(r',\s*$[^\}\]]*'), '');
+    repaired = repaired.replaceAll(RegExp(r'"[^"]*:$'), '');
+
+    // Count open brackets
+    int openBraces = 0;
+    int openSquare = 0;
+    bool inString = false;
+    bool escaped = false;
+
+    for (int i = 0; i < repaired.length; i++) {
+      final char = repaired[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char == '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char == '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char == '{') openBraces++;
+        if (char == '}') openBraces--;
+        if (char == '[') openSquare++;
+        if (char == ']') openSquare--;
+      }
+    }
+
+    if (inString) repaired += '"';
+    // Remove trailing comma if left behind
+    repaired = repaired.trimRight();
+    if (repaired.endsWith(',')) {
+      repaired = repaired.substring(0, repaired.length - 1);
+    }
+    while (openSquare > 0) {
+      repaired += ']';
+      openSquare--;
+    }
+    while (openBraces > 0) {
+      repaired += '}';
+      openBraces--;
+    }
+
+    return repaired;
   }
 }

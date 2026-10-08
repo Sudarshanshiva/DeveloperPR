@@ -25,7 +25,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GitHub PR Dashboard'),
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text('GitHub PR Dashboard'),
+        ),
         actions: [
           IconButton(
             icon: Icon(
@@ -125,9 +128,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey.shade500),
                         const SizedBox(width: 6),
-                        Text(
-                          'No login or token required — uses GitHub public API',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                        Flexible(
+                          child: Text(
+                            'No login or token required — uses GitHub public API',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          ),
                         ),
                       ],
                     ),

@@ -55,4 +55,9 @@ key.properties
 google-services.json
 GoogleService-Info.plist
 local.properties
+run.ps1
+run.bat
+run.sh
+local_config.*
+.vscode/launch.json
 
