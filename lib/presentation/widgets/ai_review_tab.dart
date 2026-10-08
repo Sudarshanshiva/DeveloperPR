@@ -177,9 +177,11 @@ class _AIReviewTabState extends State<AIReviewTab> {
                   children: [
                     Icon(Icons.open_in_new_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 6),
-                    Text(
-                      'Get your FREE Gemini API Key from Google AI Studio →',
-                      style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
+                    Expanded(
+                      child: Text(
+                        'Get your FREE Gemini API Key from Google AI Studio →',
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),
@@ -209,9 +211,11 @@ class _AIReviewTabState extends State<AIReviewTab> {
               children: [
                 Icon(Icons.lock_outline_rounded, size: 13, color: Colors.grey.shade500),
                 const SizedBox(width: 6),
-                Text(
-                  'Stored locally via encrypted storage (Never leaves device)',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                Flexible(
+                  child: Text(
+                    'Stored locally via encrypted storage (Never leaves device)',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
                 ),
               ],
             ),
@@ -235,9 +239,12 @@ class _AIReviewTabState extends State<AIReviewTab> {
           children: [
             Icon(Icons.workspace_premium_rounded, size: 14, color: Colors.amber),
             SizedBox(width: 6),
-            Text(
-              'PRO MEMBER · UNLIMITED AI REVIEWS',
-              style: TextStyle(fontSize: 11, color: Colors.amber, fontWeight: FontWeight.bold),
+            Flexible(
+              child: Text(
+                'PRO MEMBER · UNLIMITED AI REVIEWS',
+                style: TextStyle(fontSize: 11, color: Colors.amber, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -257,9 +264,12 @@ class _AIReviewTabState extends State<AIReviewTab> {
           children: [
             Icon(Icons.key_rounded, size: 14, color: Colors.green),
             SizedBox(width: 6),
-            Text(
-              'CUSTOM KEY · UNLIMITED FREE REVIEWS',
-              style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
+            Flexible(
+              child: Text(
+                'CUSTOM KEY · UNLIMITED FREE REVIEWS',
+                style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -281,12 +291,15 @@ class _AIReviewTabState extends State<AIReviewTab> {
         children: [
           Icon(Icons.bolt_rounded, size: 14, color: isLow ? Colors.orange : Colors.blue),
           const SizedBox(width: 6),
-          Text(
-            '⚡ $remaining / ${quota.maxDailyFree} FREE DAILY REVIEWS LEFT',
-            style: TextStyle(
-              fontSize: 11,
-              color: isLow ? Colors.orange : Colors.blue,
-              fontWeight: FontWeight.bold,
+          Flexible(
+            child: Text(
+              '⚡ $remaining / ${quota.maxDailyFree} FREE DAILY REVIEWS LEFT',
+              style: TextStyle(
+                fontSize: 11,
+                color: isLow ? Colors.orange : Colors.blue,
+                fontWeight: FontWeight.bold,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -752,7 +765,8 @@ class _AIReviewTabState extends State<AIReviewTab> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 48),
+            Icon(state.isAuthError ? Icons.key_off_rounded : Icons.error_outline_rounded,
+                color: state.isAuthError ? Colors.amber : Colors.redAccent, size: 48),
             const SizedBox(height: 12),
             Text(
               state.message,
@@ -763,7 +777,10 @@ class _AIReviewTabState extends State<AIReviewTab> {
             ElevatedButton.icon(
               onPressed: () {
                 if (state.isAuthError) {
-                  context.read<AiAnalysisBloc>().add(DeleteAiApiKeyEvent());
+                  PremiumUpgradeModal.show(
+                    context,
+                    const UserQuota(usedToday: 0, maxDailyFree: 3, isProMember: false, hasCustomKey: false),
+                  );
                 } else {
                   context.read<AiAnalysisBloc>().add(
                         RunAiAnalysisEvent(
@@ -778,8 +795,8 @@ class _AIReviewTabState extends State<AIReviewTab> {
                       );
                 }
               },
-              icon: Icon(state.isAuthError ? Icons.settings_rounded : Icons.refresh_rounded),
-              label: Text(state.isAuthError ? 'Re-configure API Key' : 'Retry Analysis'),
+              icon: Icon(state.isAuthError ? Icons.key_rounded : Icons.refresh_rounded),
+              label: Text(state.isAuthError ? 'Add / Configure API Key' : 'Retry Analysis'),
             ),
           ],
         ),
